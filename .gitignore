@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+app/results/
+materials/
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+*.mp4
+*.mov
+*.zip
