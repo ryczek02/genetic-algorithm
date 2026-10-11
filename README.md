@@ -2,7 +2,9 @@
 
 A classic genetic algorithm with binary chromosomes and a Tkinter GUI.
 
-![Demo (2x speed)](docs/demo.gif)
+![Demo (3x speed)](docs/demo.gif)
+
+Full video: [docs/prezentacja.mp4](docs/prezentacja.mp4)
 
 ## Run
 

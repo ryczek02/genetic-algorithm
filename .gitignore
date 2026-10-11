@@ -9,5 +9,7 @@ report/*.log
 report/*.out
 report/*.toc
 *.mp4
+!docs/prezentacja.mp4
 *.mov
 *.zip
+P1_RyczkoLukasz_MalinaMaciej/
