@@ -20,5 +20,5 @@ Python needs Tkinter. On macOS with Homebrew: `brew install python-tk@3.12`.
 ## Folders
 
 - `app/` source code (GUI, algorithm, test functions)
-- `app/results/` CSV results of every run
+- `app/results/results.db` SQLite database with the results of every run
 - `report/` LaTeX report and figures

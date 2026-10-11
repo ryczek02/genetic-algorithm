@@ -12,7 +12,7 @@ from tkinter import font, messagebox, ttk
 from functions import create_function
 from ga import GAConfig, build_algorithm
 from ga.algorithm import EpochStats, RunResult
-from storage import CsvResultRepository
+from storage import SqliteResultRepository
 
 from .charts import ChartPanel
 from .form import ParameterForm
@@ -35,12 +35,13 @@ class StatCard(ttk.LabelFrame):
 class GeneticAlgorithmApp(tk.Tk):
     """Główne okno: formularz parametrów po lewej, wyniki i wykresy po prawej."""
 
-    def __init__(self, repository: CsvResultRepository | None = None):
+    def __init__(self, repository: SqliteResultRepository | None = None):
         super().__init__()
         self.title("Algorytm genetyczny | Projekt 1 | Obliczenia ewolucyjne")
+        self._force_light_appearance()
         self.geometry("1460x860")
         self.minsize(1300, 800)
-        self.repository = repository or CsvResultRepository(RESULTS_DIR)
+        self.repository = repository or SqliteResultRepository(RESULTS_DIR / "results.db")
 
         self._events: queue.Queue = queue.Queue()
         self._stop = threading.Event()
@@ -50,13 +51,21 @@ class GeneticAlgorithmApp(tk.Tk):
         self._last_chart = 0.0
         self._optimum: float | None = None
         self._config: GAConfig | None = None
-        self.last_run_id: str | None = None
+        self.last_run_id: int | None = None
 
         self._init_fonts()
         self._build()
         self.after(100, self._poll)
 
     # ------------------------------------------------------------------ wygląd
+    def _force_light_appearance(self) -> None:
+        """Na macOS w trybie ciemnym okno zostaje jasne, bo wykresy mają jasne tło."""
+        if self.tk.call("tk", "windowingsystem") == "aqua":
+            try:
+                self.wm_attributes("-appearance", "light")
+            except tk.TclError:  # starsze wersje Tk nie mają tej opcji
+                pass
+
     def _init_fonts(self) -> None:
         base = font.nametofont("TkDefaultFont")
         size = base.cget("size")
@@ -212,7 +221,7 @@ class GeneticAlgorithmApp(tk.Tk):
             self.cards["error"].set(f"{abs(stats.best_so_far - self._optimum):.4g}")
         self.progress.configure(value=stats.epoch)
 
-    def _finish(self, result: RunResult, run_id: str) -> None:
+    def _finish(self, result: RunResult, run_id: int) -> None:
         self.last_run_id = run_id
         if self._history:
             self._show_stats(self._history[-1])
@@ -222,7 +231,7 @@ class GeneticAlgorithmApp(tk.Tk):
         state = "Zatrzymano" if result.stopped else "Zakończono"
         self.status.config(
             text=f"{state} po {len(result.history)} epokach w {result.elapsed:.2f} s. "
-            f"Wyniki zapisano w results/run_{run_id}.csv"
+            f"Wyniki zapisano w results/results.db (uruchomienie nr {run_id})."
         )
         self._reset_controls()
 

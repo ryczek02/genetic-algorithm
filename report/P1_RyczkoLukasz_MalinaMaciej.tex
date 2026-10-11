@@ -23,6 +23,7 @@
 \makeatletter
 \newcommand{\tabinput}[1]{\@@input #1 }
 \makeatother
+\input{generated/best_runs.tex}
 \newcommand{\cfgtablehead}{Konfiguracja & Średnia & Najlepszy & Najgorszy & Odch. std & Czas [s] \\}
 
 \begin{document}
@@ -52,7 +53,7 @@ Celem projektu było zaimplementowanie klasycznego algorytmu genetycznego z bina
 chromosomu, który pozwala minimalizować oraz maksymalizować funkcje dowolnej liczby zmiennych.
 Aplikacja ma interfejs graficzny, w którym można skonfigurować wszystkie parametry algorytmu,
 obserwować przebieg obliczeń na wykresach i odczytać czas wykonania. Wyniki każdej epoki są
-zapisywane do plików CSV.
+zapisywane w bazie danych SQLite.
 
 Zaimplementowane elementy:
 \begin{itemize}
@@ -64,7 +65,7 @@ Zaimplementowane elementy:
   \item operator inwersji (z prawdopodobieństwem),
   \item strategia elitarna (ułamek populacji albo liczba osobników),
   \item wykresy wartości funkcji oraz średniej i odchylenia standardowego w kolejnych epokach,
-  \item zapis wyników każdej epoki do pliku CSV.
+  \item zapis wyników każdej epoki do bazy danych SQLite.
 \end{itemize}
 
 \section{Wykorzystane technologie}
@@ -76,13 +77,13 @@ Zaimplementowane elementy:
 Technologia & Zastosowanie \\
 \midrule
 Python 3.12 & język implementacji całego projektu \\
-Tkinter / ttk (Tk 9.1) & interfejs graficzny (natywny wygląd na macOS) \\
+Tkinter / ttk (Tk 9.1) & interfejs graficzny \\
 NumPy & operacje na populacji (macierze bitów), dekodowanie chromosomów, statystyki \\
 Matplotlib & wykresy w aplikacji (osadzone w Tkinter) i w sprawozdaniu \\
 benchmark\_functions 1.1.4 & gotowe implementacje prostych funkcji testowych (L. Baronti) \\
 opfunu 1.0.1 & gotowe implementacje funkcji CEC 2014 \\
 SciPy & zależność biblioteki benchmark\_functions \\
-CSV (moduł \texttt{csv}) & zapis wyników kolejnych epok \\
+SQLite (moduł \texttt{sqlite3}) & zapis wyników kolejnych epok i eksperymentów \\
 Git & kontrola wersji \\
 \LaTeX{} (Tectonic) & sprawozdanie \\
 \bottomrule
@@ -138,7 +139,7 @@ Moduł & Zawartość \\
 \texttt{ga/algorithm.py} & \texttt{GeneticAlgorithm}: pętla epok, statystyki \texttt{EpochStats}, wynik \texttt{RunResult} \\
 \texttt{ga/factory.py} & rejestry operatorów i fabryka \texttt{build\_algorithm(config)} \\
 \texttt{functions/} & \texttt{ObjectiveFunction} oraz adaptery \texttt{BenchmarkFunctionAdapter} i \texttt{CecFunctionAdapter}, rejestr funkcji \\
-\texttt{storage/} & \texttt{CsvResultRepository}: zapis wyników do CSV \\
+\texttt{storage/} & \texttt{SqliteResultRepository}: zapis wyników do bazy SQLite (wzorzec Repozytorium) \\
 \texttt{gui/} & okno główne, formularz parametrów, panel wykresów \\
 \texttt{experiments/} & skrypty eksperymentów i generowania tabel oraz wykresów do sprawozdania \\
 \bottomrule
@@ -261,13 +262,19 @@ albo koniec zakresu mniejszy od początku) powodują wyświetlenie komunikatu z 
 \end{figure}
 
 \subsection{Zapis wyników}
-Każde uruchomienie zapisuje w katalogu \texttt{app/results/}:
+Każde uruchomienie jest zapisywane w bazie SQLite \texttt{app/results/results.db}, która ma dwie tabele:
 \begin{itemize}
-  \item \texttt{run\_<id>.csv}: wiersz dla każdej epoki z kolumnami \texttt{epoch}, \texttt{best},
-        \texttt{mean}, \texttt{std}, \texttt{best\_so\_far}, \texttt{best\_x},
-  \item \texttt{runs.csv}: jeden wiersz podsumowania na uruchomienie (funkcja, liczba zmiennych,
-        najlepszy wynik, czas, najlepszy punkt i pełna konfiguracja w formacie JSON).
+  \item \texttt{runs}: jeden wiersz podsumowania na uruchomienie (data, funkcja, liczba zmiennych,
+        najlepszy wynik, czas, liczba epok, czy przerwano, najlepszy punkt i pełna konfiguracja w formacie JSON),
+  \item \texttt{epochs}: wiersz dla każdej epoki z kolumnami \texttt{run\_id}, \texttt{epoch}, \texttt{best},
+        \texttt{mean}, \texttt{std}, \texttt{best\_so\_far}, \texttt{best\_x}
+        (klucz obcy \texttt{run\_id} wskazuje wiersz w tabeli \texttt{runs}).
 \end{itemize}
+Przykładowe zapytanie zwracające przebieg ostatniego uruchomienia:
+\begin{lstlisting}[language=SQL]
+SELECT epoch, best, mean, std FROM epochs
+WHERE run_id = (SELECT MAX(id) FROM runs) ORDER BY epoch;
+\end{lstlisting}
 Przycisk ,,Zapisz wykresy PNG'' zapisuje oba wykresy do \texttt{app/results/plots/}.
 
 \section{Wybrane funkcje testowe}
@@ -378,10 +385,14 @@ W każdym wariancie zmieniamy względem konfiguracji bazowej tylko jeden element
 krzyżowania, mutacji albo wyłączamy elitę), dzięki czemu widać wpływ tego elementu na wynik.
 Każda konfiguracja została uruchomiona 10 razy z różnymi ziarnami generatora liczb losowych.
 W tabelach podajemy średni, najlepszy i najgorszy wynik z 10 uruchomień, odchylenie standardowe
-oraz średni czas jednego uruchomienia. Pogrubiono najlepszą średnią. Eksperymenty uruchamiano
-równolegle w 10 procesach (MacBook z procesorem Apple Silicon), więc czasy służą do porównania
-konfiguracji między sobą; pojedyncze uruchomienie w aplikacji jest zwykle szybsze.
-Wszystkie wyniki pojedynczych uruchomień są w pliku \texttt{report/data/experiment\_runs.csv}.
+oraz średni czas jednego uruchomienia. Pogrubiono najlepszą średnią. Wszystkie 480 uruchomień
+wykonano kolejno w jednym procesie na tym samym komputerze (MacBook z procesorem Apple Silicon),
+dzięki czemu zmierzone czasy można bezpośrednio porównywać. Wyniki pojedynczych uruchomień
+(wynik i czas) są w bazie \texttt{report/data/experiments.db}.
+
+Wykresy wartości funkcji celu oraz średniej i odchylenia standardowego w kolejnych epokach
+zamieszczamy tylko dla najlepszego uruchomienia danej funkcji, czyli uruchomienia z najmniejszym
+wynikiem spośród wszystkich 100 uruchomień przy 10 zmiennych (10 konfiguracji po 10 powtórzeń).
 
 \subsection{Ackley, 10 zmiennych}
 \begin{table}[H]
@@ -406,7 +417,7 @@ punkt to około $\pm 3.1\cdot10^{-5}$. Mniejszy błąd można uzyskać, zwiększ
   \centering
   \includegraphics[width=0.8\textwidth]{best_ackley_value.png}
   \includegraphics[width=0.8\textwidth]{best_ackley_stats.png}
-  \caption{Ackley: najlepsze uruchomienie. Wartość funkcji, średnia i odchylenie standardowe w kolejnych epokach (skala logarytmiczna).}
+  \caption{Ackley, najlepsze uruchomienie (\bestAckley). Wartość funkcji, średnia i odchylenie standardowe w kolejnych epokach (skala logarytmiczna).}
 \end{figure}
 
 \subsection{Schwefel, 10 zmiennych}
@@ -427,7 +438,7 @@ punkt to około $\pm 3.1\cdot10^{-5}$. Mniejszy błąd można uzyskać, zwiększ
   \centering
   \includegraphics[width=0.8\textwidth]{best_schwefel_value.png}
   \includegraphics[width=0.8\textwidth]{best_schwefel_stats.png}
-  \caption{Schwefel: najlepsze uruchomienie.}
+  \caption{Schwefel, najlepsze uruchomienie (\bestSchwefel).}
 \end{figure}
 
 \subsection{CEC2014 F4, 10 zmiennych}
@@ -448,7 +459,7 @@ punkt to około $\pm 3.1\cdot10^{-5}$. Mniejszy błąd można uzyskać, zwiększ
   \centering
   \includegraphics[width=0.8\textwidth]{best_cec2014_f4_value.png}
   \includegraphics[width=0.8\textwidth]{best_cec2014_f4_stats.png}
-  \caption{CEC2014 F4: najlepsze uruchomienie.}
+  \caption{CEC2014 F4, najlepsze uruchomienie (\bestCecFour).}
 \end{figure}
 
 \subsection{CEC2014 F8, 10 zmiennych}
@@ -469,7 +480,7 @@ punkt to około $\pm 3.1\cdot10^{-5}$. Mniejszy błąd można uzyskać, zwiększ
   \centering
   \includegraphics[width=0.8\textwidth]{best_cec2014_f8_value.png}
   \includegraphics[width=0.8\textwidth]{best_cec2014_f8_stats.png}
-  \caption{CEC2014 F8: najlepsze uruchomienie.}
+  \caption{CEC2014 F8, najlepsze uruchomienie (\bestCecEight).}
 \end{figure}
 
 \subsection{Porównanie konfiguracji}
@@ -479,6 +490,16 @@ punkt to około $\pm 3.1\cdot10^{-5}$. Mniejszy błąd można uzyskać, zwiększ
   \includegraphics[width=\textwidth]{config_comparison.png}
   \caption{Średni błąd $f - f^*$ z 10 uruchomień dla każdej konfiguracji (skala logarytmiczna, mniej znaczy lepiej).}
 \end{figure}
+
+\subsection{Porównanie czasu obliczeń}
+
+Czasy w tabelach to średni czas jednego uruchomienia (1000 epok, populacja 100). Przy 10 zmiennych
+jedno uruchomienie trwa od 0.54 do 0.91 s. Najwięcej zależy od metody krzyżowania: krzyżowanie
+jednopunktowe, jednorodne i ziarniste jest o około 15 do 20\% szybsze od dwupunktowego
+(np. Schwefel: 0.54 s zamiast 0.67 s). Mutacja dwupunktowa jest nieco wolniejsza od jednopunktowej
+(0.72 s zamiast 0.67 s), a metoda selekcji i wyłączenie elity prawie nie wpływają na czas.
+Funkcje CEC liczą się dłużej niż Ackley i Schwefel (0.77 do 0.85 s w konfiguracji bazowej
+zamiast 0.67 do 0.71 s), bo każde wywołanie funkcji wykonuje przesunięcie i obrót punktu.
 
 \subsection{Wpływ liczby zmiennych}
 

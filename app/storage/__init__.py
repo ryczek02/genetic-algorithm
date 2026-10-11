@@ -1,3 +1,3 @@
-from .csv_repository import CsvResultRepository
+from .sqlite_repository import SqliteResultRepository
 
-__all__ = ["CsvResultRepository"]
+__all__ = ["SqliteResultRepository"]

@@ -3,14 +3,17 @@
 Uruchomienie (z katalogu app/):
     python -m experiments.run_experiments            # obliczenia + wykresy + tabele
     python -m experiments.run_experiments --plots    # tylko wykresy i tabele z zapisanych wyników
+
+Uruchomienia wykonywane są kolejno w jednym procesie, żeby zmierzone czasy były porównywalne.
+Wynik każdego uruchomienia trafia do bazy report/data/experiments.db.
 """
 from __future__ import annotations
 
 import argparse
-import csv
 import pickle
+import sqlite3
 import warnings
-from concurrent.futures import ProcessPoolExecutor
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
@@ -84,21 +87,29 @@ def run_all() -> list[dict]:
     tasks = _tasks()
     print(f"Uruchomień: {len(tasks)}")
     results = []
-    with ProcessPoolExecutor() as pool:
-        for i, res in enumerate(pool.map(_execute, tasks, chunksize=4), 1):
-            results.append(res)
-            if i % 50 == 0:
-                print(f"  {i}/{len(tasks)}")
+    for i, task in enumerate(tasks, 1):
+        results.append(_execute(task))
+        if i % 20 == 0:
+            print(f"  {i}/{len(tasks)}", flush=True)
     CACHE.parent.mkdir(parents=True, exist_ok=True)
     CACHE.write_bytes(pickle.dumps(results))
     data = REPORT / "data"
     data.mkdir(parents=True, exist_ok=True)
-    with open(data / "experiment_runs.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["function", "config", "n_vars", "run", "seed", "best_value", "time_s"])
-        for r in results:
-            writer.writerow([r["function"], r["config"], r["n_vars"], r["run"], r["seed"], r["best"], f"{r['time']:.4f}"])
+    save_to_database(results, data / "experiments.db")
     return results
+
+
+def save_to_database(results: list[dict], path: Path) -> None:
+    path.unlink(missing_ok=True)
+    with closing(sqlite3.connect(path)) as conn, conn:
+        conn.execute(
+            "CREATE TABLE runs (function TEXT, config TEXT, n_vars INTEGER, run INTEGER, seed INTEGER,"
+            " best_value REAL, time_s REAL, PRIMARY KEY (function, config, n_vars, run))"
+        )
+        conn.executemany(
+            "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ((r["function"], r["config"], r["n_vars"], r["run"], r["seed"], float(r["best"]), r["time"]) for r in results),
+        )
 
 
 def main() -> None:

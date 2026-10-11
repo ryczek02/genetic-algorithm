@@ -96,6 +96,21 @@ def summary_table(results) -> str:
     return "\n".join(rows[:-1])
 
 
+BEST_RUN_MACROS = {
+    "ackley": "bestAckley", "schwefel": "bestSchwefel", "cec2014_f4": "bestCecFour", "cec2014_f8": "bestCecEight",
+}
+
+
+def best_run_macros(best_runs: dict[str, dict]) -> str:
+    """Makra LaTeX z opisem najlepszego uruchomienia (do podpisów wykresów)."""
+    lines = []
+    for function, run in best_runs.items():
+        text = (f"konfiguracja ,,{CONFIG_LABELS[run['config']]}'', uruchomienie {run['run'] + 1} z 10, "
+                f"wynik {fmt(run['best'])}, czas {run['time']:.2f} s")
+        lines.append(f"\\newcommand{{\\{BEST_RUN_MACROS[function]}}}{{{text}}}")
+    return "\n".join(lines) + "\n"
+
+
 # ----------------------------------------------------------------- wykresy
 def plot_best_run(function: str, run: dict) -> None:
     h = run["history"]
@@ -180,12 +195,15 @@ def build_assets(results: list[dict]) -> None:
     TABLES.mkdir(parents=True, exist_ok=True)
     grouped = group(results)
 
+    best_runs = {}
     for function in FUNCTIONS:
         (TABLES / f"configs_{function}.tex").write_text(config_table(function, grouped), encoding="utf-8")
         ten = [r for r in results if r["function"] == function and r["n_vars"] == 10]
-        plot_best_run(function, min(ten, key=lambda r: r["best"]))
+        best_runs[function] = min(ten, key=lambda r: (r["best"], r["time"]))
+        plot_best_run(function, best_runs[function])
         plot_function(function)
         print("wykresy:", function)
+    (TABLES / "best_runs.tex").write_text(best_run_macros(best_runs), encoding="utf-8")
     (TABLES / "dimensions.tex").write_text(dimension_table(grouped), encoding="utf-8")
     (TABLES / "optima.tex").write_text(optimum_table(), encoding="utf-8")
     (TABLES / "summary.tex").write_text(summary_table(results), encoding="utf-8")

@@ -13,6 +13,7 @@ from pathlib import Path
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 
 import Quartz  # noqa: E402
+from AppKit import NSApplication  # noqa: E402
 
 from ga import GAConfig  # noqa: E402
 from gui import GeneticAlgorithmApp  # noqa: E402
@@ -50,7 +51,15 @@ def main() -> None:
     app.attributes("-topmost", True)
     steps = iter(SCENARIOS)
 
+    def activate() -> None:
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)  # aktywne okno na zrzucie
+        app.focus_force()
+
     def capture(name: str, then) -> None:
+        activate()
+        app.after(500, lambda: shoot(name, then))
+
+    def shoot(name: str, then) -> None:
         app.update_idletasks()
         subprocess.run(["screencapture", "-x", "-o", f"-l{window_id()}", str(OUT / f"{name}.png")], check=True)
         print("zapisano", name)
@@ -68,7 +77,7 @@ def main() -> None:
         except StopIteration:
             app.destroy()
             return
-        app.focus_force()
+        activate()
         app.form.set_config(cfg)
         app.charts.select(tab)
         app.log_var.set(action == "run_log")
