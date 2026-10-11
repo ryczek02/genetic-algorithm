@@ -4,6 +4,8 @@ A classic genetic algorithm with binary chromosomes and a Tkinter GUI.
 
 Authors: Łukasz Ryczko, Maciej Malina
 
+![Demo (2x speed)](docs/demo.gif)
+
 ## Run
 
 ```bash
